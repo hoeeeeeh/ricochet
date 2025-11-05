@@ -156,7 +156,7 @@ function onPlayProof() {
   refreshUrl();
   renderAll();
 
-  const delay = 700; // 0.5x slower replay
+  const delay = 1400; // slower replay (2x slower than before)
   simulateMoves(app.board, sanitizeMoves(moves), (stateAfter, i, movePair) => {
     app.board = stateAfter;
     app.moves += movePair;
