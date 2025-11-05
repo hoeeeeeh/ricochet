@@ -216,7 +216,22 @@ function createClassicBoardFromSeed(rng, size) {
       candidateTargets.push({ x: off.x + p.x, y: off.y + p.y, color: t.color });
     }
   }
-  const target = candidateTargets.length ? candidateTargets[rng.nextInt(candidateTargets.length)] : { x: 7, y: 7, color: 'r' };
+  // helper to check wall adjacency on any side
+  const hasAnyWall = (x, y) => {
+    const w = walls[y][x];
+    return w.u || w.r || w.d || w.l;
+  };
+  const validTargets = candidateTargets.filter(t => hasAnyWall(t.x, t.y));
+  let target = (validTargets.length ? validTargets : candidateTargets)[
+    (validTargets.length ? rng.nextInt(validTargets.length) : (candidateTargets.length ? rng.nextInt(candidateTargets.length) : 0))
+  ] || { x: 7, y: 7, color: 'r' };
+  // enforce adjacency if not satisfied by adding a nearby wall
+  if (!hasAnyWall(target.x, target.y)) {
+    if (target.x > 0) addWall(walls, target.x, target.y, 'l');
+    else if (target.x < size - 1) addWall(walls, target.x, target.y, 'r');
+    else if (target.y > 0) addWall(walls, target.x, target.y, 'u');
+    else addWall(walls, target.x, target.y, 'd');
+  }
 
   // robots: one per quadrant (TL,TR,BL,BR), avoid target and center 2x2
   const used = new Set([`${target.x},${target.y}`]);
@@ -233,7 +248,7 @@ export function createBoardFromSeed(rng, size, mode = 'c') {
     const walls = makeWalls(size);
     const obstacleCount = 10 + rng.nextInt(3); // 10~12
     randomObstacles(rng, walls, obstacleCount);
-    const [target] = distinctPositions(rng, size, 1);
+    let [target] = distinctPositions(rng, size, 1);
     const targetColor = ['r','y','b','g'][rng.nextInt(4)];
     const used = new Set([`${target.x},${target.y}`]);
     const r = pickCellInQuadrant(rng, size, 0, used);
@@ -241,6 +256,20 @@ export function createBoardFromSeed(rng, size, mode = 'c') {
     const b = pickCellInQuadrant(rng, size, 2, used);
     const g = pickCellInQuadrant(rng, size, 3, used);
     const robots = { r, y, b, g };
+    // ensure target has adjacent wall or boundary; retry a few times else add a wall
+    const hasAnyWall = (x, y) => walls[y][x].u || walls[y][x].r || walls[y][x].d || walls[y][x].l;
+    let guard = 0;
+    while (!hasAnyWall(target.x, target.y) && guard++ < 200) {
+      const cand = distinctPositions(rng, size, 1)[0];
+      if (!cand) break;
+      target = cand;
+    }
+    if (!hasAnyWall(target.x, target.y)) {
+      if (target.x > 0) addWall(walls, target.x, target.y, 'l');
+      else if (target.x < size - 1) addWall(walls, target.x, target.y, 'r');
+      else if (target.y > 0) addWall(walls, target.x, target.y, 'u');
+      else addWall(walls, target.x, target.y, 'd');
+    }
     return { size, walls, robots, target: { x: target.x, y: target.y, color: targetColor }, markers: [] };
   }
   return createClassicBoardFromSeed(rng, size);
@@ -313,6 +342,83 @@ export function simulateMoves(state, moves, onStep, delay = 0) {
     }
     tick();
   });
+}
+
+
+// --------- Proof search (depth-limited) ---------
+function robotsKey(robots) {
+  // stable order r|y|b|g
+  return `r${robots.r.x},${robots.r.y}|y${robots.y.x},${robots.y.y}|b${robots.b.x},${robots.b.y}|g${robots.g.x},${robots.g.y}`;
+}
+
+function moveImmutable(board, robots, robotKey, dir) {
+  const tmpBoard = { size: board.size, walls: board.walls, robots };
+  const from = robots[robotKey];
+  const end = slideUntilStop(tmpBoard, from.x, from.y, dir);
+  if (end.x === from.x && end.y === from.y) return null;
+  const next = {
+    r: robots.r, y: robots.y, b: robots.b, g: robots.g
+  };
+  next[robotKey] = { x: end.x, y: end.y };
+  return next;
+}
+
+export function findProofWithinDepth(board, maxDepth = 20, timeLimitMs = 700) {
+  const start = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  const targetColor = board.target?.color;
+  const targetX = board.target?.x, targetY = board.target?.y;
+  if (!targetColor || targetX === undefined) return null;
+
+  const dirs = ['u','r','d','l'];
+  const robotOrder = ['r','y','b','g'];
+  // Bias target robot first
+  const orderedRobots = [targetColor, ...robotOrder.filter(k => k !== targetColor)];
+
+  const visited = new Map(); // key -> minDepth
+
+  function isGoal(robots) {
+    const p = robots[targetColor];
+    return p.x === targetX && p.y === targetY;
+  }
+
+  function timedOut() {
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    return (now - start) > timeLimitMs;
+  }
+
+  function dfs(robots, depth, lastRobot, path) {
+    if (isGoal(robots)) return path;
+    if (depth >= maxDepth) return null;
+    if (timedOut()) return null;
+
+    const key = robotsKey(robots);
+    const prevDepth = visited.get(key);
+    if (prevDepth !== undefined && prevDepth <= depth) return null;
+    visited.set(key, depth);
+
+    // generate moves, prefer those that move target robot closer to target
+    const candidates = [];
+    for (const rk of orderedRobots) {
+      for (const d of dirs) {
+        const next = moveImmutable(board, robots, rk, d);
+        if (!next) continue;
+        // optional pruning: avoid no-op repeats is already handled; allow same robot consecutively
+        const pos = next[targetColor];
+        const heuristic = Math.abs(pos.x - targetX) + Math.abs(pos.y - targetY);
+        candidates.push({ rk, d, next, heuristic });
+      }
+    }
+    candidates.sort((a,b) => a.heuristic - b.heuristic);
+
+    for (const c of candidates) {
+      const found = dfs(c.next, depth + 1, c.rk, path + c.rk + c.d);
+      if (found) return found;
+      if (timedOut()) return null;
+    }
+    return null;
+  }
+
+  return dfs(board.robots, 0, null, '') || null;
 }
 
 

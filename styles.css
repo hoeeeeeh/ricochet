@@ -57,6 +57,7 @@ canvas#board-canvas {
 
 .panel { background: var(--panel); border: 1px solid #1f2738; border-radius: 12px; padding: 12px; height: fit-content; }
 .status-row { margin-bottom: 12px; font-weight: 600; color: var(--accent); }
+.status-row.success { color: var(--primary); }
 .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
 .legend-item { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .chip { width: 14px; height: 14px; border-radius: 3px; display: inline-block; background: #334155; border: 1px solid #60728d; }
@@ -72,5 +73,13 @@ canvas#board-canvas {
   .main { grid-template-columns: 1fr; }
   .toolbar input { width: 220px; }
 }
+
+/* Modal overlay */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: none; align-items: center; justify-content: center; z-index: 1000; }
+.overlay.show { display: flex; }
+.overlay.hidden { display: none; }
+.modal-card { background: var(--panel); border: 1px solid #27334a; border-radius: 14px; padding: 18px; width: min(92vw, 520px); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.modal-message { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 12px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 

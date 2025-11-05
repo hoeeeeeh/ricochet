@@ -1,6 +1,6 @@
 import { parseUrl, setUrl, buildUrlFromState, getSeedAndMovesFromUrl, sanitizeMoves } from './url.js';
 import { XorShift32 } from './random.js';
-import { createBoardFromSeed, initializeState, moveRobotOne, simulateMoves } from './logic.js';
+import { createBoardFromSeed, initializeState, moveRobotOne, simulateMoves, findProofWithinDepth } from './logic.js';
 import { Renderer } from './ui.js';
 
 const GRID_SIZE = 16;
@@ -16,6 +16,10 @@ const elements = {
   canvas: document.getElementById('board-canvas'),
   undo: document.getElementById('btn-undo'),
   playerName: document.getElementById('player-name'),
+  overlay: document.getElementById('overlay'),
+  modalMessage: document.getElementById('modal-message'),
+  modalShare: document.getElementById('btn-share-proof'),
+  modalClose: document.getElementById('btn-close-modal'),
 };
 
 let app = {
@@ -28,6 +32,8 @@ let app = {
   isReplaying: false,     // prevent input during replay
   mode: 'c',              // 'c' classic, 'r' random
   playerName: '',
+  announcedSuccess: false, // prevent duplicate alerts
+  proofCount: undefined,
 };
 
 function randomSeed() {
@@ -63,6 +69,29 @@ function setStatus(text) {
   elements.status.textContent = text;
 }
 
+function updateSuccessUI() {
+  const success = hasReachedTarget(app.board);
+  app.board.success = success;
+  elements.status.parentElement.classList.toggle('success', !!success);
+  if (success) {
+    setStatus('증명 성공');
+  }
+}
+
+function showModal(message, { showCopy = true } = {}) {
+  if (!elements.overlay) return;
+  elements.modalMessage.textContent = message;
+  if (elements.modalShare) elements.modalShare.style.display = showCopy ? 'inline-flex' : 'none';
+  elements.overlay.classList.remove('hidden');
+  elements.overlay.classList.add('show');
+}
+
+function hideModal() {
+  if (!elements.overlay) return;
+  elements.overlay.classList.add('hidden');
+  elements.overlay.classList.remove('show');
+}
+
 function toggleProofMode(on) {
   app.proofMode = on;
   if (!on) app.selectedRobot = null;
@@ -77,12 +106,19 @@ function onCreateRoom() {
   // 기본은 클래식 모드. 필요 시 app.mode='r'로 바꿔 랜덤 장애물 모드 사용
   app.mode = 'c';
   app.playerName = (elements.playerName && elements.playerName.value.trim()) || '';
+  app.announcedSuccess = false;
   app.board = createBoardFromSeed(rng, GRID_SIZE, app.mode);
   if (!app.board.markers) app.board.markers = [];
   app.moves = '';
   toggleProofMode(false);
   refreshUrl();
   renderAll();
+  updateSuccessUI();
+  // Asynchronously try to find a 20-step solution (time limited)
+  setTimeout(() => {
+    const path = findProofWithinDepth(app.board, 20, 800);
+    setStatus(path ? '20수 이내 도달 가능' : '20수 이내 도달 여부 미확정');
+  }, 0);
 }
 
 function onStartProof() {
@@ -112,6 +148,7 @@ function onPlayProof() {
   app.seed = seed >>> 0;
   app.mode = mode || 'c';
   app.playerName = name || '';
+  app.announcedSuccess = false;
   const rng = new XorShift32(app.seed);
   app.board = createBoardFromSeed(rng, GRID_SIZE, app.mode);
   if (!app.board.markers) app.board.markers = [];
@@ -130,12 +167,22 @@ function onPlayProof() {
     app.board.markers.push({ x: pos.x, y: pos.y, step: i + 1, robot: rk });
     refreshUrl();
     renderAll();
+    updateSuccessUI();
+    if (hasReachedTarget(app.board) && !app.announcedSuccess) {
+      app.announcedSuccess = true;
+      app.proofCount = Math.floor((app.moves?.length || 0) / 2);
+      const titleName = (app.playerName && app.playerName.trim().length > 0) ? app.playerName : '플레이어';
+      document.title = `${titleName}님이 ${app.proofCount}수만에 증명하셨어요!`;
+      showModal(`${titleName}님이 증명에 성공했습니다.`, { showCopy: false });
+    }
   }, delay).then(() => {
     app.isReplaying = false;
     setStatus('증명 재생 완료');
-    // If proof reaches target and name provided, announce success
-    if (hasReachedTarget(app.board)) {
-      if (app.playerName) alert(`${app.playerName}님이 증명에 성공했습니다.`);
+    // 최종 상태에서도 성공 판정 및 안내 (이름 없으면 기본 문구)
+    if (hasReachedTarget(app.board) && !app.announcedSuccess) {
+      app.announcedSuccess = true;
+      const name = app.playerName && app.playerName.trim().length > 0 ? app.playerName : '플레이어';
+      showModal(`${name}님이 증명에 성공했습니다.`, { showCopy: false });
     }
   });
 }
@@ -152,6 +199,25 @@ function wireInputs() {
       if (app.seed) refreshUrl();
     });
   }
+  if (elements.modalClose) elements.modalClose.addEventListener('click', hideModal);
+  if (elements.modalShare) elements.modalShare.addEventListener('click', async () => {
+    const url = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName, count: app.proofCount });
+    const name = app.playerName && app.playerName.trim().length > 0 ? app.playerName : '플레이어';
+    const count = app.proofCount ?? Math.floor((app.moves?.length || 0) / 2);
+    const title = `${name}님이 ${count}수만에 증명하셨어요!`;
+    const text = `${title} \n${url}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text, url });
+      } else {
+        await navigator.clipboard.writeText(text);
+        setStatus('공유 텍스트를 복사했습니다.');
+      }
+    } catch {
+      setStatus('공유 실패');
+    }
+  });
+  if (elements.overlay) elements.overlay.addEventListener('click', (e) => { if (e.target === elements.overlay) hideModal(); });
 
   // Canvas interactions
   elements.canvas.addEventListener('click', (e) => {
@@ -221,11 +287,15 @@ function applyMove(robotKey, dir) {
   app.board.markers.push({ x: pos.x, y: pos.y, step: Math.floor(app.moves.length / 2), robot: robotKey });
   refreshUrl();
   renderAll();
+  updateSuccessUI();
   // success check: target color robot reached target
   if (hasReachedTarget(app.board)) {
-    const url = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName });
-    navigator.clipboard.writeText(url).catch(() => {});
-    alert(`증명 성공! 링크가 복사되었습니다.\n${url}`);
+    app.announcedSuccess = true;
+    app.proofCount = Math.floor((app.moves?.length || 0) / 2);
+    const url = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName, count: app.proofCount });
+    setUrl(url, true);
+    document.title = `${(app.playerName && app.playerName.trim()) ? app.playerName : '플레이어'}님이 ${app.proofCount}수만에 증명하셨어요!`;
+    showModal('증명 성공! 링크를 공유하세요.', { showCopy: true });
   }
 }
 
@@ -278,6 +348,7 @@ function main() {
       renderAll();
     }
     elements.proofInput.value = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName });
+    updateSuccessUI();
   }
 }
 

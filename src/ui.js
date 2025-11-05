@@ -164,6 +164,14 @@ export class Renderer {
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
+    // success highlight ring
+    if (board.success) {
+      ctx.lineWidth = Math.max(3, cell * 0.1);
+      ctx.strokeStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
