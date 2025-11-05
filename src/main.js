@@ -205,16 +205,25 @@ function wireInputs() {
     const name = app.playerName && app.playerName.trim().length > 0 ? app.playerName : '플레이어';
     const count = app.proofCount ?? Math.floor((app.moves?.length || 0) / 2);
     const title = `${name}님이 ${count}수만에 증명하셨어요!`;
-    const text = `${title} \n${url}`;
     try {
       if (navigator.share) {
-        await navigator.share({ title, text, url });
+        await navigator.share({ title, text: title, url });
+        setStatus('공유 완료');
+      } else if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+        setStatus('링크를 복사했습니다.');
       } else {
-        await navigator.clipboard.writeText(text);
-        setStatus('공유 텍스트를 복사했습니다.');
+        // execCommand fallback
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        setStatus('링크를 복사했습니다.');
       }
-    } catch {
-      setStatus('공유 실패');
+    } catch (e) {
+      setStatus('공유/복사 실패');
     }
   });
   if (elements.overlay) elements.overlay.addEventListener('click', (e) => { if (e.target === elements.overlay) hideModal(); });
