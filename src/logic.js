@@ -286,6 +286,8 @@ export function addHardFeatures(rng, board) {
   let guard = 0;
   while (mirrors.length < mirrorCount && guard++ < 5000) {
     const x = rng.nextInt(size), y = rng.nextInt(size);
+    // avoid outer boundary rows/cols for mirrors as well
+    if (x === 0 || y === 0 || x === size - 1 || y === size - 1) continue;
     if ((x === 7 || x === 8) && (y === 7 || y === 8)) continue;
     const key = `${x},${y}`;
     if (used.has(key)) continue;
