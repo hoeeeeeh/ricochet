@@ -327,7 +327,7 @@ function applyMove(robotKey, dir) {
   if (hasReachedTarget(app.board)) {
     app.announcedSuccess = true;
     app.proofCount = Math.floor((app.moves?.length || 0) / 2);
-    const url = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName, count: app.proofCount });
+    const url = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName, count: app.proofCount, difficulty: app.difficulty });
     setUrl(url, true);
     document.title = `${(app.playerName && app.playerName.trim()) ? app.playerName : '플레이어'}님이 ${app.proofCount}수만에 증명하셨어요!`;
     showModal('증명 성공! 링크를 공유하세요.', { showCopy: true });
@@ -391,7 +391,7 @@ function main() {
       app.board = replayState;
       renderAll();
     }
-    elements.proofInput.value = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName });
+    elements.proofInput.value = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName, difficulty: app.difficulty });
     updateSuccessUI();
   }
 }

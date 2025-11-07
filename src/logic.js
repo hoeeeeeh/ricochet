@@ -277,6 +277,8 @@ export function createBoardFromSeed(rng, size, mode = 'c') {
 
 export function addHardFeatures(rng, board) {
   const size = board.size;
+  const walls = board.walls;
+  const cellHasAnyWall = (x, y) => walls[y][x].u || walls[y][x].r || walls[y][x].d || walls[y][x].l;
   // mirrors: 3~5
   const mirrorCount = 3 + rng.nextInt(3);
   const mirrors = [];
@@ -288,6 +290,8 @@ export function addHardFeatures(rng, board) {
     const x = rng.nextInt(size), y = rng.nextInt(size);
     // avoid outer boundary rows/cols for mirrors as well
     if (x === 0 || y === 0 || x === size - 1 || y === size - 1) continue;
+    // avoid sticking to obstacles: skip cells that have any wall edge
+    if (cellHasAnyWall(x, y)) continue;
     if ((x === 7 || x === 8) && (y === 7 || y === 8)) continue;
     const key = `${x},${y}`;
     if (used.has(key)) continue;
@@ -304,6 +308,8 @@ export function addHardFeatures(rng, board) {
     const key = `${x},${y}`;
     // avoid outer boundary rows/cols
     if (x === 0 || y === 0 || x === size - 1 || y === size - 1) continue;
+    // avoid sticking to obstacles
+    if (cellHasAnyWall(x, y)) continue;
     if ((x === 7 || x === 8) && (y === 7 || y === 8)) continue;
     if (used.has(key)) continue;
     used.add(key);
@@ -314,6 +320,7 @@ export function addHardFeatures(rng, board) {
     const x = rng.nextInt(size), y = rng.nextInt(size);
     const key = `${x},${y}`;
     if (x === 0 || y === 0 || x === size - 1 || y === size - 1) continue;
+    if (cellHasAnyWall(x, y)) continue;
     if ((x === 7 || x === 8) && (y === 7 || y === 8)) continue;
     if (used.has(key)) continue;
     used.add(key);
