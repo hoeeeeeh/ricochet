@@ -20,26 +20,28 @@ export function parseUrl(urlLike) {
     const m = (u.searchParams.get('m') || 'c').toLowerCase(); // c=classic, r=random
     const n = (u.searchParams.get('n') || '').trim();
     const c = u.searchParams.get('c');
+    const d = (u.searchParams.get('d') || 'n').toLowerCase(); // n=normal, h=hard
     const seed = s ? parseInt(s, 36) >>> 0 : null;
     const count = c ? parseInt(c, 10) : undefined;
-    return { seed, moves: p, mode: m === 'r' ? 'r' : 'c', name: n, count };
+    return { seed, moves: p, mode: m === 'r' ? 'r' : 'c', name: n, count, difficulty: d === 'h' ? 'h' : 'n' };
   } catch {
     return { seed: null, moves: '', mode: 'c', name: '' };
   }
 }
 
 export function getSeedAndMovesFromUrl() {
-  const { seed, moves, mode, name } = parseUrl(window.location.href);
-  return { seed, moves, mode, name };
+  const { seed, moves, mode, name, difficulty } = parseUrl(window.location.href);
+  return { seed, moves, mode, name, difficulty };
 }
 
-export function buildUrlFromState({ seed, moves, mode, name, count }) {
+export function buildUrlFromState({ seed, moves, mode, name, count, difficulty }) {
   if (!seed) return window.location.href;
   const s36 = (seed >>> 0).toString(36);
   const m = (mode === 'r' || mode === 'c') ? mode : 'c';
   const n = name ? String(name) : undefined;
   const c = (typeof count === 'number' && isFinite(count) && count > 0) ? String(count) : undefined;
-  return toUrl(window.location.origin, window.location.pathname, { s: s36, p: moves || '', m, n, c });
+  const d = (difficulty === 'h' || difficulty === 'n') ? difficulty : undefined;
+  return toUrl(window.location.origin, window.location.pathname, { s: s36, p: moves || '', m, n, c, d });
 }
 
 export function setUrl(url, replace = false) {

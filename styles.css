@@ -30,6 +30,10 @@ body {
   background: var(--panel); border: 1px solid #20283a; color: var(--text);
   padding: 8px 10px; border-radius: 8px; width: 360px;
 }
+.toolbar select {
+  background: var(--panel); border: 1px solid #20283a; color: var(--text);
+  padding: 8px 10px; border-radius: 8px;
+}
 /* narrower name input */
 #player-name { width: 160px; }
 button {

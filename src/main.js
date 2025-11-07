@@ -1,6 +1,6 @@
 import { parseUrl, setUrl, buildUrlFromState, getSeedAndMovesFromUrl, sanitizeMoves } from './url.js';
 import { XorShift32 } from './random.js';
-import { createBoardFromSeed, initializeState, moveRobotOne, simulateMoves, findProofWithinDepth } from './logic.js';
+import { createBoardFromSeed, initializeState, moveRobotOne, simulateMoves, findProofWithinDepth, addHardFeatures } from './logic.js';
 import { Renderer } from './ui.js';
 
 const GRID_SIZE = 16;
@@ -20,6 +20,7 @@ const elements = {
   modalMessage: document.getElementById('modal-message'),
   modalShare: document.getElementById('btn-share-proof'),
   modalClose: document.getElementById('btn-close-modal'),
+  difficultySelect: document.getElementById('difficulty-select'),
 };
 
 let app = {
@@ -34,6 +35,7 @@ let app = {
   playerName: '',
   announcedSuccess: false, // prevent duplicate alerts
   proofCount: undefined,
+  difficulty: 'n',
 };
 
 function randomSeed() {
@@ -43,20 +45,23 @@ function randomSeed() {
 }
 
 function setupFromUrl() {
-  const { seed, moves, mode, name } = getSeedAndMovesFromUrl();
+  const { seed, moves, mode, name, difficulty } = getSeedAndMovesFromUrl();
   if (!seed) return false;
   app.seed = seed;
   app.mode = mode || 'c';
   app.playerName = name || '';
+  app.difficulty = difficulty || 'n';
   const rng = new XorShift32(seed);
   app.board = createBoardFromSeed(rng, GRID_SIZE, app.mode);
+  if (app.difficulty === 'h') addHardFeatures(rng, app.board);
   app.moves = moves || '';
   if (elements.playerName) elements.playerName.value = app.playerName;
+  if (elements.difficultySelect) elements.difficultySelect.value = app.difficulty;
   return true;
 }
 
 function refreshUrl() {
-  const url = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName });
+  const url = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName, difficulty: app.difficulty });
   setUrl(url, true);
   elements.proofInput.value = url;
 }
@@ -107,7 +112,9 @@ function onCreateRoom() {
   app.mode = 'c';
   app.playerName = (elements.playerName && elements.playerName.value.trim()) || '';
   app.announcedSuccess = false;
+  app.difficulty = (elements.difficultySelect && elements.difficultySelect.value) || 'n';
   app.board = createBoardFromSeed(rng, GRID_SIZE, app.mode);
+  if (app.difficulty === 'h') addHardFeatures(rng, app.board);
   if (!app.board.markers) app.board.markers = [];
   // Add start markers 'S' for all robots
   ['r','y','b','g'].forEach((rk) => {
@@ -132,7 +139,7 @@ function onStartProof() {
 }
 
 function onCopyLink() {
-  const url = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName });
+  const url = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName, difficulty: app.difficulty });
   navigator.clipboard.writeText(url).then(() => {
     setStatus('링크를 복사했습니다.');
   }).catch(() => setStatus('클립보드 복사 실패'));
@@ -142,7 +149,7 @@ function onPlayProof() {
   const urlText = elements.proofInput.value.trim();
   if (!urlText) return;
 
-  const { seed, moves, mode, name } = parseUrl(urlText);
+  const { seed, moves, mode, name, difficulty } = parseUrl(urlText);
   if (!seed) {
     setStatus('URL에 시드(s)가 없습니다.');
     return;
@@ -153,9 +160,11 @@ function onPlayProof() {
   app.seed = seed >>> 0;
   app.mode = mode || 'c';
   app.playerName = name || '';
+  app.difficulty = difficulty || 'n';
   app.announcedSuccess = false;
   const rng = new XorShift32(app.seed);
   app.board = createBoardFromSeed(rng, GRID_SIZE, app.mode);
+  if (app.difficulty === 'h') addHardFeatures(rng, app.board);
   if (!app.board.markers) app.board.markers = [];
   // Start markers '.' for all robots
   ['r','y','b','g'].forEach((rk) => {
@@ -215,7 +224,7 @@ function wireInputs() {
   }
   if (elements.modalClose) elements.modalClose.addEventListener('click', hideModal);
   if (elements.modalShare) elements.modalShare.addEventListener('click', async () => {
-    const url = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName, count: app.proofCount });
+    const url = buildUrlFromState({ seed: app.seed, moves: app.moves, mode: app.mode, name: app.playerName, count: app.proofCount, difficulty: app.difficulty });
     const name = app.playerName && app.playerName.trim().length > 0 ? app.playerName : '플레이어';
     const count = app.proofCount ?? Math.floor((app.moves?.length || 0) / 2);
     const title = `${name}님이 ${count}수만에 증명하셨어요!`;
@@ -241,6 +250,9 @@ function wireInputs() {
     }
   });
   if (elements.overlay) elements.overlay.addEventListener('click', (e) => { if (e.target === elements.overlay) hideModal(); });
+  if (elements.difficultySelect) elements.difficultySelect.addEventListener('change', () => {
+    app.difficulty = elements.difficultySelect.value;
+  });
 
   // Canvas interactions
   elements.canvas.addEventListener('click', (e) => {
@@ -325,6 +337,7 @@ function applyMove(robotKey, dir) {
 function rebuildBoardFromMoves() {
   const rng = new XorShift32(app.seed);
   const rebuilt = createBoardFromSeed(rng, GRID_SIZE, app.mode);
+  if (app.difficulty === 'h') addHardFeatures(rng, rebuilt);
   rebuilt.markers = [];
   ['r','y','b','g'].forEach((rk) => {
     const pos = rebuilt.robots[rk];

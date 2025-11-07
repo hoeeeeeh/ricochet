@@ -275,6 +275,53 @@ export function createBoardFromSeed(rng, size, mode = 'c') {
   return createClassicBoardFromSeed(rng, size);
 }
 
+export function addHardFeatures(rng, board) {
+  const size = board.size;
+  // mirrors: 3~5
+  const mirrorCount = 3 + rng.nextInt(3);
+  const mirrors = [];
+  const used = new Set();
+  used.add(`${board.target.x},${board.target.y}`);
+  ['r','y','b','g'].forEach(k => used.add(`${board.robots[k].x},${board.robots[k].y}`));
+  let guard = 0;
+  while (mirrors.length < mirrorCount && guard++ < 5000) {
+    const x = rng.nextInt(size), y = rng.nextInt(size);
+    if ((x === 7 || x === 8) && (y === 7 || y === 8)) continue;
+    const key = `${x},${y}`;
+    if (used.has(key)) continue;
+    used.add(key);
+    const type = rng.nextInt(2) === 0 ? '/' : '\\';
+    mirrors.push({ x, y, type });
+  }
+
+  // wormholes: single pair
+  let a = null, b = null;
+  guard = 0;
+  while (!a && guard++ < 5000) {
+    const x = rng.nextInt(size), y = rng.nextInt(size);
+    const key = `${x},${y}`;
+    // avoid outer boundary rows/cols
+    if (x === 0 || y === 0 || x === size - 1 || y === size - 1) continue;
+    if ((x === 7 || x === 8) && (y === 7 || y === 8)) continue;
+    if (used.has(key)) continue;
+    used.add(key);
+    a = { x, y };
+  }
+  guard = 0;
+  while (!b && guard++ < 5000) {
+    const x = rng.nextInt(size), y = rng.nextInt(size);
+    const key = `${x},${y}`;
+    if (x === 0 || y === 0 || x === size - 1 || y === size - 1) continue;
+    if ((x === 7 || x === 8) && (y === 7 || y === 8)) continue;
+    if (used.has(key)) continue;
+    used.add(key);
+    b = { x, y };
+  }
+
+  board.mirrors = mirrors;
+  board.wormholes = (a && b) ? [a, b] : [];
+}
+
 export function initializeState() {
   return {};
 }
@@ -287,16 +334,65 @@ function occupiedByRobot(robots, x, y) {
   return ['r','y','b','g'].some(k => robots[k].x === x && robots[k].y === y);
 }
 
+function getMirrorAt(board, x, y) {
+  if (!board.mirrors) return null;
+  return board.mirrors.find(m => m.x === x && m.y === y) || null;
+}
+
+function getWormholeDest(board, x, y) {
+  if (!board.wormholes || board.wormholes.length !== 2) return null;
+  const [a, b] = board.wormholes;
+  if (a.x === x && a.y === y) return b;
+  if (b.x === x && b.y === y) return a;
+  return null;
+}
+
+function turnByMirror(dir, mirrorType) {
+  // '/' or '\'
+  if (mirrorType === '/') {
+    if (dir === 'u') return 'r';
+    if (dir === 'r') return 'u';
+    if (dir === 'd') return 'l';
+    if (dir === 'l') return 'd';
+  } else { // '\'
+    if (dir === 'u') return 'l';
+    if (dir === 'l') return 'u';
+    if (dir === 'd') return 'r';
+    if (dir === 'r') return 'd';
+  }
+  return dir;
+}
+
 function slideUntilStop(board, fromX, fromY, dir) {
   const { size, walls, robots } = board;
-  const d = DIRS[dir];
   let x = fromX, y = fromY;
-  while (true) {
-    if (isWall(walls, x, y, dir)) break; // wall at edge of current cell
+  let currentDir = dir;
+  let guard = 0;
+  while (guard++ < 1000) {
+    const d = DIRS[currentDir];
+    if (isWall(walls, x, y, currentDir)) break;
     const nx = x + d.dx, ny = y + d.dy;
     if (!inBounds(size, nx, ny)) break;
     if (occupiedByRobot(robots, nx, ny)) break;
+    // step into next cell
     x = nx; y = ny;
+    // wormhole teleport
+    const dest = getWormholeDest(board, x, y);
+    if (dest) {
+      // If destination occupied, stop before entering wormhole
+      if (occupiedByRobot(robots, dest.x, dest.y)) {
+        // revert last step
+        x -= d.dx; y -= d.dy;
+        break;
+      }
+      x = dest.x; y = dest.y;
+    }
+    // mirror deflection
+    const mirror = getMirrorAt(board, x, y);
+    if (mirror) {
+      currentDir = turnByMirror(currentDir, mirror.type);
+      continue;
+    }
   }
   return { x, y };
 }

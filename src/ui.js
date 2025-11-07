@@ -56,6 +56,7 @@ export class Renderer {
     this.drawGrid(board, g);
     this.drawWalls(board, g);
     this.drawTarget(board, g);
+    this.drawSpecials(board, g);
     this.drawRobots(board, g, selectedRobotKey);
     // markers last to ensure they stay visible above robots
     this.drawMarkers(board, g);
@@ -76,6 +77,51 @@ export class Renderer {
       ctx.beginPath(); ctx.moveTo(originX, y); ctx.lineTo(originX + side, y); ctx.stroke();
     }
     ctx.restore();
+  }
+
+  drawSpecials(board, g) {
+    const { ctx } = this;
+    const { originX, originY, cell } = g;
+    // Mirrors
+    if (board.mirrors && board.mirrors.length) {
+      ctx.save();
+      ctx.strokeStyle = '#94e2ff';
+      ctx.lineWidth = Math.max(2, cell * 0.06);
+      for (const m of board.mirrors) {
+        const x0 = originX + m.x * cell;
+        const y0 = originY + m.y * cell;
+        if (m.type === '/') {
+          ctx.beginPath();
+          ctx.moveTo(x0, y0 + cell);
+          ctx.lineTo(x0 + cell, y0);
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x0 + cell, y0 + cell);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+    // Wormholes (pair)
+    if (board.wormholes && board.wormholes.length === 2) {
+      ctx.save();
+      ctx.strokeStyle = '#8b5cf6';
+      ctx.lineWidth = Math.max(2, cell * 0.05);
+      for (const w of board.wormholes) {
+        const cx = originX + w.x * cell + cell / 2;
+        const cy = originY + w.y * cell + cell / 2;
+        const r = cell * 0.28;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
 
   drawMarkers(board, g) {
