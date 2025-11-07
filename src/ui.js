@@ -99,7 +99,10 @@ export class Renderer {
       // number colored by robot
       const colorKey = m.robot || 'target';
       ctx.fillStyle = COLORS[colorKey] || '#ffffff';
-      const text = String(m.step);
+      let text;
+      if (m.label !== undefined) text = String(m.label);
+      else if (m.step !== undefined) text = String(m.step);
+      else text = '';
       // stroke outline for readability on any background
       ctx.lineWidth = Math.max(2, cell * 0.06);
       ctx.strokeStyle = 'rgba(0,0,0,0.85)';

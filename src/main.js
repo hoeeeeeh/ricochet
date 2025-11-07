@@ -109,6 +109,11 @@ function onCreateRoom() {
   app.announcedSuccess = false;
   app.board = createBoardFromSeed(rng, GRID_SIZE, app.mode);
   if (!app.board.markers) app.board.markers = [];
+  // Add start markers 'S' for all robots
+  ['r','y','b','g'].forEach((rk) => {
+    const pos = app.board.robots[rk];
+    if (pos) app.board.markers.push({ x: pos.x, y: pos.y, label: '.', robot: rk });
+  });
   app.moves = '';
   toggleProofMode(false);
   refreshUrl();
@@ -152,39 +157,48 @@ function onPlayProof() {
   const rng = new XorShift32(app.seed);
   app.board = createBoardFromSeed(rng, GRID_SIZE, app.mode);
   if (!app.board.markers) app.board.markers = [];
+  // Start markers '.' for all robots
+  ['r','y','b','g'].forEach((rk) => {
+    const pos = app.board.robots[rk];
+    if (pos) app.board.markers.push({ x: pos.x, y: pos.y, label: '.', robot: rk });
+  });
   app.moves = '';
   refreshUrl();
   renderAll();
 
   const delay = 1400; // slower replay (2x slower than before)
-  simulateMoves(app.board, sanitizeMoves(moves), (stateAfter, i, movePair) => {
-    app.board = stateAfter;
-    app.moves += movePair;
-    // push marker at robot's end position
-    const rk = movePair[0];
-    const pos = app.board.robots[rk];
-    if (!app.board.markers) app.board.markers = [];
-    app.board.markers.push({ x: pos.x, y: pos.y, step: i + 1, robot: rk });
-    refreshUrl();
-    renderAll();
-    updateSuccessUI();
-    if (hasReachedTarget(app.board) && !app.announcedSuccess) {
-      app.announcedSuccess = true;
-      app.proofCount = Math.floor((app.moves?.length || 0) / 2);
-      const titleName = (app.playerName && app.playerName.trim().length > 0) ? app.playerName : '플레이어';
-      document.title = `${titleName}님이 ${app.proofCount}수만에 증명하셨어요!`;
-      showModal(`${titleName}님이 증명에 성공했습니다.`, { showCopy: false });
-    }
-  }, delay).then(() => {
-    app.isReplaying = false;
-    setStatus('증명 재생 완료');
-    // 최종 상태에서도 성공 판정 및 안내 (이름 없으면 기본 문구)
-    if (hasReachedTarget(app.board) && !app.announcedSuccess) {
-      app.announcedSuccess = true;
-      const name = app.playerName && app.playerName.trim().length > 0 ? app.playerName : '플레이어';
-      showModal(`${name}님이 증명에 성공했습니다.`, { showCopy: false });
-    }
-  });
+  const smoves = sanitizeMoves(moves);
+  renderAll();
+  setTimeout(() => {
+    simulateMoves(app.board, smoves, (stateAfter, i, movePair) => {
+      app.board = stateAfter;
+      app.moves += movePair;
+      // push marker at robot's end position
+      const rk = movePair[0];
+      const pos = app.board.robots[rk];
+      if (!app.board.markers) app.board.markers = [];
+      app.board.markers.push({ x: pos.x, y: pos.y, step: i + 1, robot: rk });
+      refreshUrl();
+      renderAll();
+      updateSuccessUI();
+      if (hasReachedTarget(app.board) && !app.announcedSuccess) {
+        app.announcedSuccess = true;
+        app.proofCount = Math.floor((app.moves?.length || 0) / 2);
+        const titleName = (app.playerName && app.playerName.trim().length > 0) ? app.playerName : '플레이어';
+        document.title = `${titleName}님이 ${app.proofCount}수만에 증명하셨어요!`;
+        showModal(`${titleName}님이 증명에 성공했습니다.`, { showCopy: false });
+      }
+    }, delay).then(() => {
+      app.isReplaying = false;
+      setStatus('증명 재생 완료');
+      // 최종 상태에서도 성공 판정 및 안내 (이름 없으면 기본 문구)
+      if (hasReachedTarget(app.board) && !app.announcedSuccess) {
+        app.announcedSuccess = true;
+        const name = app.playerName && app.playerName.trim().length > 0 ? app.playerName : '플레이어';
+        showModal(`${name}님이 증명에 성공했습니다.`, { showCopy: false });
+      }
+    });
+  }, delay);
 }
 
 function wireInputs() {
@@ -312,6 +326,10 @@ function rebuildBoardFromMoves() {
   const rng = new XorShift32(app.seed);
   const rebuilt = createBoardFromSeed(rng, GRID_SIZE, app.mode);
   rebuilt.markers = [];
+  ['r','y','b','g'].forEach((rk) => {
+    const pos = rebuilt.robots[rk];
+    if (pos) rebuilt.markers.push({ x: pos.x, y: pos.y, label: '.', robot: rk });
+  });
   if (app.moves && app.moves.length % 2 === 0) {
     simulateMoves(rebuilt, app.moves, (s, i, pair) => {
       const rk = pair[0];
@@ -347,6 +365,10 @@ function main() {
     if (app.moves && app.moves.length % 2 === 0) {
       const replayState = JSON.parse(JSON.stringify(app.board));
       replayState.markers = [];
+      ['r','y','b','g'].forEach((rk) => {
+        const pos = replayState.robots[rk];
+        if (pos) replayState.markers.push({ x: pos.x, y: pos.y, label: '.', robot: rk })
+      });
       simulateMoves(replayState, app.moves, (s, i, pair) => {
         const rk = pair[0];
         const pos = s.robots[rk];
